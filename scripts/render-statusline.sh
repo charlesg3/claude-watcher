@@ -24,6 +24,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${SESSION_ID:?render-statusline.sh requires SESSION_ID in environment}"
 FORMAT="${1:-ansi}"
 
+# Don't render the terminal statusline when running inside a Neovim session —
+# the Neovim plugin handles display there. Only suppress ansi (terminal) output;
+# vim format is always rendered on request from the plugin itself.
+[[ "$FORMAT" == "ansi" && -n "${NVIM:-}" ]] && exit 0
+
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/state.sh"
 source "$SCRIPT_DIR/lib/format.sh"
