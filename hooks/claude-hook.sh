@@ -96,45 +96,22 @@ _git_info() {
   fi
 }
 
-# _should_notify_channel CHANNEL — returns 0 if the channel is enabled
-_should_notify_channel() {
-  local channel="$1"
-  [[ "$(get_config "notifications.${channel}.enabled" "true")" == "true" ]]
+# _cancel_focus_watcher
+# Cancel any pending focus watcher for the current session.
+_cancel_focus_watcher() {
+  cancel_focus_watcher "$SESSION_ID"
 }
 
-# _fire_ready_notifications
-# Fires notifications on every Stop event, regardless of duration.
-# Currently rings the terminal bell; extend here to add OS/sound on_ready later.
+# _fire_ready_notifications TITLE MESSAGE
+# Rings the bell immediately then starts the progressive escalation via
+# notify_escalating: if the user doesn't return to the Kitty tab within
+# focus_timeout_seconds, fires OS notification + sound.
 _fire_ready_notifications() {
+  local title="${1:-Claude}"
+  local message="${2:-Claude needs your attention}"
   ring_bell
+  notify_escalating "$SESSION_ID" "$title" "$message"
   log_info "ready notification fired"
-}
-
-# _fire_long_running_notifications DURATION
-# Fires OS + sound notifications for each channel whose threshold was exceeded.
-_fire_long_running_notifications() {
-  local duration="$1"
-  local dir_label title message
-  dir_label=$(basename "$CWD")
-  title="Claude: done"
-  message="Finished in ${duration}s in ${dir_label}"
-
-  local fired=false
-  for channel in os sound; do
-    _should_notify_channel "$channel" || continue
-    [[ "$(get_config "notifications.${channel}.on_long_running" "true")" == "true" ]] || continue
-    local threshold
-    threshold=$(get_threshold "$channel")
-    if [[ "$threshold" -eq 0 ]] || [[ "$duration" -ge "$threshold" ]]; then
-      case "$channel" in
-        os)    notify_os "$title" "$message" ;;
-        sound) play_sound "long_running" ;;
-      esac
-      fired=true
-    fi
-  done
-
-  [[ "$fired" == "true" ]] && log_info "long_running notification fired (${duration}s)" || true
 }
 
 # ---------------------------------------------------------------------------
@@ -234,6 +211,7 @@ handle_user_prompt_submit() {
       | .prompt_start_epoch = $epoch')
 
   write_state "$SESSION_ID" "$updated"
+  _cancel_focus_watcher
   log_info "UserPromptSubmit state→working"
 }
 
@@ -254,13 +232,10 @@ handle_notification() {
     fi
   fi
 
-  # Surface attention-needed notifications via OS alert + bell
+  # Surface attention-needed notifications via bell + progressive escalation
   case "$notification_type" in
     idle_prompt|permission_prompt)
-      _fire_ready_notifications
-      if _should_notify_channel "os"; then
-        notify_os "${title:-Claude}" "${message:-Claude needs your attention}"
-      fi
+      _fire_ready_notifications "${title:-Claude}" "${message:-Claude needs your attention}"
       ;;
   esac
 
@@ -315,12 +290,19 @@ handle_stop() {
     write_state "$SESSION_ID" "$new_state"
   fi
 
-  _fire_ready_notifications
-  _fire_long_running_notifications "$duration"
+  local dir_label
+  dir_label=$(basename "$CWD")
+  _fire_ready_notifications "Claude: done" "Finished in ${duration}s in ${dir_label}"
   log_info "Stop duration=${duration}s state→ready"
 }
 
+handle_pre_tool_use() {
+  # Claude is actively running — cancel any pending focus watcher
+  _cancel_focus_watcher
+}
+
 handle_session_end() {
+  _cancel_focus_watcher
   _notify_vim_session_end "$SESSION_ID"
   local state_file
   state_file="$(state_file_path "$SESSION_ID")"
@@ -338,6 +320,7 @@ handle_session_end() {
 case "$EVENT" in
   SessionStart)      handle_session_start      ;;
   UserPromptSubmit)  handle_user_prompt_submit  ;;
+  PreToolUse)        handle_pre_tool_use        ;;
   Notification)      handle_notification        ;;
   Stop)              handle_stop                ;;
   SessionEnd)        handle_session_end         ;;

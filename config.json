@@ -33,7 +33,8 @@
     }
   },
   "long_running": {
-    "threshold_seconds": 120
+    "threshold_seconds": 120,
+    "focus_timeout_seconds": 30
   },
   "statusline": {
     "enabled": true,
