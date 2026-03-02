@@ -163,6 +163,7 @@ When implementing an integration, add it as an optional `require()` in
 | `branch` | hooks: `git rev-parse --abbrev-ref HEAD` |
 | `git_staged` | hooks: `git diff --cached --numstat \| wc -l` |
 | `git_modified` | hooks: `git diff --numstat \| wc -l` |
+| `claude_pid` | `SessionStart` hook: PID of the Claude process (walks up past shell wrappers) |
 | `duration_seconds` | `Stop` hook: `now - prompt_start_epoch` |
 | `context_pct` | `statusLine` stdin: `100 - context_window.remaining_percentage` |
 | `cost_usd` | `statusLine` stdin: `cost.total_cost_usd` |
@@ -197,7 +198,7 @@ Configure these five hook events to point at `hooks/claude-hook.sh`:
 
 | Event | Handler action |
 |---|---|
-| `SessionStart` | write_state: session_id, directory, branch, git info, model |
+| `SessionStart` | write_state: session_id, directory, branch, git info, model, claude_pid |
 | `UserPromptSubmit` | patch_state: state=working, prompt_start_epoch, git refresh |
 | `Notification` | OS/sound alert only; no state file change |
 | `Stop` | patch_state: state=ready, duration_seconds; fire long-running alerts |
@@ -241,7 +242,8 @@ Each running Claude session produces `/tmp/claude-status-SESSION_ID.json`:
   "context_tokens": 14200,
   "cost_usd": 0.042,
   "prompt_start_epoch": 1700000000,
-  "duration_seconds": 12
+  "duration_seconds": 12,
+  "claude_pid": 12345
 }
 ```
 

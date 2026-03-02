@@ -51,6 +51,34 @@ export CLAUDE_SESSION_ID="$SESSION_ID"
 # Helpers
 # ---------------------------------------------------------------------------
 
+_notify_vim_session_start() {
+  local session_id="$1" claude_pid="${2:-0}"
+  notify_vim "ClaudeStatusRegister('${session_id}', ${claude_pid})"
+}
+
+_notify_vim_session_end() {
+  notify_vim "ClaudeStatusUnregister('${1}')"
+}
+
+# _find_claude_pid — walk up the process tree past shell wrappers to find the
+# Claude process PID.  Claude runs hooks as a subprocess, potentially via an
+# intermediate shell (bash/sh/env), so we skip up to 3 hops of shell processes.
+_find_claude_pid() {
+  local pid="$PPID"
+  local hops=0
+  while [[ "$hops" -lt 3 && -n "$pid" && "$pid" -gt 1 ]]; do
+    local cmd
+    cmd=$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ') || break
+    case "$cmd" in
+      bash|sh|zsh|dash|env) ;;
+      *) break ;;
+    esac
+    pid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ')
+    hops=$(( hops + 1 ))
+  done
+  printf '%s' "$pid"
+}
+
 # _git_info DIR — sets GIT_BRANCH, GIT_STAGED, GIT_MODIFIED for the given dir
 _git_info() {
   local dir="${1:-$CWD}"
@@ -110,8 +138,9 @@ handle_session_start() {
   source=$(printf '%s' "$HOOK_INPUT" | jq -r '.source // empty')
   model=$(printf '%s'  "$HOOK_INPUT" | jq -r '.model  // empty')
 
-  local now
+  local now claude_pid
   now=$(date +%s)
+  claude_pid=$(_find_claude_pid)
 
   _git_info "$CWD"
 
@@ -125,6 +154,7 @@ handle_session_start() {
     --arg source        "$source" \
     --arg model         "$model" \
     --argjson epoch     "$now" \
+    --argjson claude_pid "${claude_pid:-0}" \
     '{
       session_id:          $session_id,
       state:               "ready",
@@ -134,11 +164,13 @@ handle_session_start() {
       git_modified:        $git_modified,
       source:              $source,
       model:               $model,
-      session_start_epoch: $epoch
+      session_start_epoch: $epoch,
+      claude_pid:          $claude_pid
     }')
 
   write_state "$SESSION_ID" "$new_state"
-  log_info "SessionStart source=$source dir=$CWD"
+  _notify_vim_session_start "$SESSION_ID" "$claude_pid"
+  log_info "SessionStart source=$source dir=$CWD pid=$claude_pid"
 }
 
 handle_user_prompt_submit() {
@@ -213,7 +245,7 @@ handle_stop() {
 
   if [[ -f "$state_file" ]]; then
     local prompt_start
-    prompt_start=$(read_state_field "$state_file" "prompt_start_epoch")
+    prompt_start=$(read_state_field "prompt_start_epoch")
     [[ -n "$prompt_start" ]] && duration=$(( now - prompt_start ))
 
     local updated
@@ -255,6 +287,7 @@ handle_stop() {
 }
 
 handle_session_end() {
+  _notify_vim_session_end "$SESSION_ID"
   local state_file
   state_file="$(state_file_path "$SESSION_ID")"
   rm -f "$state_file"

@@ -105,6 +105,20 @@ _rotate_log() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Neovim RPC helper
+# ---------------------------------------------------------------------------
+
+# notify_vim EXPR
+# Evaluates a Vimscript expression in the parent Neovim instance, if any.
+# $NVIM is set by Neovim for every process running inside one of its terminal
+# buffers, so this is silently a no-op when running outside Neovim.
+# Runs asynchronously so it never blocks the calling script.
+notify_vim() {
+  [[ -n "${NVIM:-}" ]] || return 0
+  nvim --server "$NVIM" --remote-expr "$1" &>/dev/null &
+}
+
 log_info() {
   mkdir -p "$(dirname "$CLAUDE_STATUS_LOG")"
   _log_line "INFO" "$@"

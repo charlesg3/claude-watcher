@@ -89,11 +89,19 @@ fi
 _log "rendering from STATE_FILE=$STATE_FILE"
 
 # ---------------------------------------------------------------------------
-# Delegate rendering
+# Extract SESSION_ID from the resolved state file.
+# ---------------------------------------------------------------------------
+SESSION_ID="$(jq -r '.session_id // empty' "$STATE_FILE")"
+if [[ -z "$SESSION_ID" ]]; then
+  _log "exit: no session_id in $STATE_FILE"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Delegate rendering.
 # In the future, skip this when running inside Neovim ($NVIM is set) and let
 # the winbar handle display instead.
 # ---------------------------------------------------------------------------
+export SESSION_ID
 export STATE_FILE
-export STDIN_CONTEXT_PCT
-export STDIN_COST_USD
 exec "$SCRIPT_DIR/render-statusline.sh"

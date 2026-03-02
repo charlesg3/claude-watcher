@@ -38,7 +38,7 @@
   "statusline": {
     "enabled": true,
     "layout": [
-      "state", "directory", "branch", "git_status",
+      "state", "directory", "branch", "git_status", "session_id",
       "spacer",
       "context", "cost", "duration"
     ],
@@ -60,11 +60,7 @@
       "error":         "#C91614",
       "warning":       "#FFB86C",
       "branch":        "#B1B9F5",
-      "dim":           "#676B79",
-      "last_status_ok":      "#55B96D",
-      "last_status_fail":    "#FF2C6D",
-      "last_status_unknown": "#676B79",
-      "reset":         ""
+      "dim":           "#676B79"
     }
   }
 }
