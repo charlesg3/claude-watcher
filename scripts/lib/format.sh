@@ -73,6 +73,10 @@ format_ansi() {
 format_vim() {
   local s="$1"
 
+  # Escape bare % in component output so vim treats them as literals (%%).
+  # Must happen before token substitutions, which intentionally add % prefixes.
+  s="${s//%/%%}"
+
   # Handle the two special-case tokens first
   s="${s//\[\[\/\]\]/%#Normal#}"
   s="${s//\[\[spacer\]\]/%=}"
