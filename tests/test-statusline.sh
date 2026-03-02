@@ -61,13 +61,13 @@ run_scenario() {
         expected_state="${state_dir}/claude-status-${session_id}.json"
         cp "$state_file" "$expected_state"
 
-        local env_args=("COLUMNS=${STATUSLINE_WIDTH:-120}")
+        local env_args=("COLUMNS=${STATUSLINE_WIDTH:-120}" "NVIM=")
         [[ -f "$config_file" ]] && env_args+=("CONFIG_OVERRIDE=$config_file")
 
         output=$(env "${env_args[@]}" bash "$STATUSLINE" < "$stdin_file" 2>&1) || exit_code=$?
         rm -f "$expected_state"
     else
-        local env_args=("COLUMNS=${STATUSLINE_WIDTH:-120}" "STATE_FILE=$state_file")
+        local env_args=("COLUMNS=${STATUSLINE_WIDTH:-120}" "STATE_FILE=$state_file" "NVIM=")
         [[ -f "$config_file" ]] && env_args+=("CONFIG_OVERRIDE=$config_file")
 
         output=$(env "${env_args[@]}" bash "$STATUSLINE" 2>&1) || exit_code=$?
