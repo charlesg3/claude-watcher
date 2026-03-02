@@ -99,9 +99,12 @@ _rotate_log() {
   local lines
   lines="$(wc -l < "$CLAUDE_STATUS_LOG")"
   if (( lines > CLAUDE_STATUS_LOG_MAX_LINES )); then
-    local tmp="${CLAUDE_STATUS_LOG}.tmp"
+    # Use PID-unique tmp file so concurrent hook processes don't race.
+    # || rm -f handles the case where another process rotated first.
+    local tmp="${CLAUDE_STATUS_LOG}.${$}.tmp"
     tail -n "$CLAUDE_STATUS_LOG_MAX_LINES" "$CLAUDE_STATUS_LOG" > "$tmp" \
-      && mv "$tmp" "$CLAUDE_STATUS_LOG"
+      && mv "$tmp" "$CLAUDE_STATUS_LOG" 2>/dev/null \
+      || rm -f "$tmp"
   fi
 }
 
