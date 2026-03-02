@@ -96,6 +96,12 @@ _git_info() {
   fi
 }
 
+# ring_bell — send a terminal bell to the controlling terminal.
+# Uses /dev/tty so it works even when stdout/stderr are redirected.
+ring_bell() {
+  printf '\a' > /dev/tty 2>/dev/null || true
+}
+
 # _should_notify_channel CHANNEL — returns 0 if the channel is enabled
 _should_notify_channel() {
   local channel="$1"
@@ -222,9 +228,10 @@ handle_notification() {
     fi
   fi
 
-  # Surface attention-needed notifications via OS alert
+  # Surface attention-needed notifications via OS alert + bell
   case "$notification_type" in
     idle_prompt|permission_prompt)
+      ring_bell
       if _should_notify_channel "os"; then
         notify_os "${title:-Claude}" "${message:-Claude needs your attention}"
       fi
@@ -282,6 +289,7 @@ handle_stop() {
     write_state "$SESSION_ID" "$new_state"
   fi
 
+  ring_bell
   _fire_long_running_notifications "$duration"
   log_info "Stop duration=${duration}s state→ready"
 }
@@ -290,8 +298,12 @@ handle_session_end() {
   _notify_vim_session_end "$SESSION_ID"
   local state_file
   state_file="$(state_file_path "$SESSION_ID")"
-  rm -f "$state_file"
-  log_info "SessionEnd state file removed"
+  if [[ -f "$state_file" ]]; then
+    local updated
+    updated=$(jq '.state = "exited" | del(.claude_pid)' "$state_file")
+    write_state "$SESSION_ID" "$updated"
+  fi
+  log_info "SessionEnd session=$SESSION_ID state→exited"
 }
 
 # ---------------------------------------------------------------------------
