@@ -150,6 +150,26 @@ handle_session_start() {
 
   _git_info "$CWD"
 
+  # When context is compacted mid-response the session_id stays the same but
+  # SessionStart fires again.  Preserve "working" state and prompt_start_epoch
+  # so the statusline doesn't flash back to "ready" while Claude is still
+  # processing.  For fresh (non-compact) starts always begin with "ready".
+  local initial_state="ready"
+  local prompt_start_epoch="null"
+  if [[ "$source" == "compact" ]]; then
+    local state_file
+    state_file="$(state_file_path "$SESSION_ID")"
+    if [[ -f "$state_file" ]]; then
+      local prev_state prev_epoch
+      prev_state=$(jq -r '.state              // empty' "$state_file")
+      prev_epoch=$(jq -r '.prompt_start_epoch // empty' "$state_file")
+      if [[ "$prev_state" == "working" ]]; then
+        initial_state="working"
+        [[ -n "$prev_epoch" ]] && prompt_start_epoch="$prev_epoch"
+      fi
+    fi
+  fi
+
   local new_state
   new_state=$(jq -n \
     --arg session_id    "$SESSION_ID" \
@@ -161,9 +181,11 @@ handle_session_start() {
     --arg model         "$model" \
     --argjson epoch     "$now" \
     --argjson claude_pid "${claude_pid:-0}" \
+    --arg state         "$initial_state" \
+    --argjson prompt_start_epoch "$prompt_start_epoch" \
     '{
       session_id:          $session_id,
-      state:               "ready",
+      state:               $state,
       directory:           $directory,
       branch:              $branch,
       git_staged:          $git_staged,
@@ -172,11 +194,13 @@ handle_session_start() {
       model:               $model,
       session_start_epoch: $epoch,
       claude_pid:          $claude_pid
-    }')
+    } + (if $prompt_start_epoch != null then
+           { prompt_start_epoch: $prompt_start_epoch }
+         else {} end)')
 
   write_state "$SESSION_ID" "$new_state"
   _notify_vim_session_start "$SESSION_ID" "$claude_pid"
-  log_info "SessionStart source=$source dir=$CWD pid=$claude_pid"
+  log_info "SessionStart source=$source state=$initial_state dir=$CWD pid=$claude_pid"
 }
 
 handle_user_prompt_submit() {
