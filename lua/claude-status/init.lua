@@ -38,6 +38,29 @@ function M.setup(opts)
 end
 
 -- ---------------------------------------------------------------------------
+-- Config helpers
+-- ---------------------------------------------------------------------------
+
+local function _read_json(path)
+  if vim.fn.filereadable(path) == 0 then return nil end
+  local ok, decoded = pcall(
+    vim.fn.json_decode,
+    table.concat(vim.fn.readfile(path), "\n")
+  )
+  return ok and decoded or nil
+end
+
+local function _merged_config()
+  local cfg = _read_json(_plugin_root .. "/config.json") or {}
+  local user = _read_json(vim.fn.expand("~/.config/claude-status/config.json"))
+  if user then cfg = vim.tbl_deep_extend("force", cfg, user) end
+  return cfg
+end
+
+-- State file directory — read once at load time from the merged config.
+local _state_dir = _merged_config().state_dir or "/tmp"
+
+-- ---------------------------------------------------------------------------
 -- Highlight groups
 --
 -- Names are derived generically from statusline.colors keys in config.json:
@@ -51,25 +74,8 @@ end
 -- ---------------------------------------------------------------------------
 
 -- _load_colors() -> { token -> "#rrggbb" }
--- Reads statusline.colors from the merged config (repo defaults overlaid with
--- ~/.config/claude-status/config.json user overrides).
 local function _load_colors()
-  local function read_json(path)
-    if vim.fn.filereadable(path) == 0 then return nil end
-    local ok, decoded = pcall(
-      vim.fn.json_decode,
-      table.concat(vim.fn.readfile(path), "\n")
-    )
-    return ok and decoded or nil
-  end
-
-  local cfg = read_json(_plugin_root .. "/config.json") or {}
-  local user = read_json(vim.fn.expand("~/.config/claude-status/config.json"))
-  if user then
-    cfg = vim.tbl_deep_extend("force", cfg, user)
-  end
-
-  return (cfg.statusline or {}).colors or {}
+  return (_merged_config().statusline or {}).colors or {}
 end
 
 local function _setup_highlights()
@@ -97,6 +103,49 @@ end
 
 local _render_cache = {}
 local _timer = nil
+
+-- ---------------------------------------------------------------------------
+-- nvim_active tracking
+--
+-- Writes nvim_active=true/false to the session state file when a Claude
+-- terminal buffer becomes visible in (or disappears from) all windows.
+-- Only writes when the value in the file differs from the desired value.
+--
+-- A session is active if its buffer is the one shown in the current window.
+-- ---------------------------------------------------------------------------
+
+-- _patch_nvim_active(session_id, active)
+-- Reads the state file, compares nvim_active, and writes back atomically
+-- only if the value has changed.
+local function _patch_nvim_active(session_id, active)
+  local state_file = _state_dir .. "/claude-status-" .. session_id .. ".json"
+  local f = io.open(state_file, "r")
+  if not f then return end
+  local content = f:read("*a")
+  f:close()
+
+  local ok, state = pcall(vim.fn.json_decode, content)
+  if not ok or type(state) ~= "table" then return end
+  if state.nvim_active == active then return end
+
+  state.nvim_active = active
+  local tmp = state_file .. ".tmp"
+  local out = io.open(tmp, "w")
+  if not out then return end
+  out:write(vim.fn.json_encode(state) .. "\n")
+  out:close()
+  os.rename(tmp, state_file)
+end
+
+-- _update_nvim_active()
+-- For every registered session, sets nvim_active=true only if the current
+-- window is showing that session's buffer.
+local function _update_nvim_active()
+  local cur_buf = vim.api.nvim_win_get_buf(vim.api.nvim_get_current_win())
+  for bufnr, session_id in pairs(sessions._buf_sessions) do
+    _patch_nvim_active(session_id, bufnr == cur_buf)
+  end
+end
 
 -- _refresh_session(session_id)
 -- Runs render-statusline.sh asynchronously for one session, updates the cache,
@@ -216,6 +265,7 @@ function M.register(session_id, claude_pid)
   end
   _start_timer()
   _refresh_session(session_id)
+  _update_nvim_active()
   return "" -- remote-expr requires a return value
 end
 
@@ -318,6 +368,14 @@ vim.api.nvim_create_autocmd("BufDelete", {
       _stop_timer()
     end
   end,
+})
+
+-- Update nvim_active in the state file when the focused window changes.
+-- WinEnter fires when the user moves focus; BufWinEnter/BufWinLeave cover
+-- splits and :hide; WinClosed covers :q.
+-- vim.schedule defers until after the window list has settled.
+vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter", "BufWinLeave", "WinClosed" }, {
+  callback = function() vim.schedule(_update_nvim_active) end,
 })
 
 -- Re-apply highlights after any colour scheme change (themes reset them).

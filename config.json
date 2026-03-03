@@ -9,21 +9,30 @@
   "notifications": {
     "terminal": {
       "enabled": true,
-      "notification_threshold": 0
+      "notification_threshold": 0,
+      "skip_kitty_active": true,
+      "skip_nvim_active": false
     },
     "sound": {
       "enabled": true,
       "volume": 0.7,
       "path": null,
-      "notification_threshold": 30
+      "notification_threshold": 60,
+      "skip_kitty_active": false,
+      "skip_nvim_active": false
     },
     "os": {
       "enabled": true,
-      "notification_threshold": 30
+      "notification_threshold": 30,
+      "skip_kitty_active": true,
+      "skip_nvim_active": false
     },
-    "vim": {
+    "nvim": {
       "enabled": true,
-      "notification_threshold": 0
+      "notification_threshold": 15,
+      "skip_kitty_active": false,
+      "skip_nvim_active": false,
+      "notification": "luaeval('vim.notify(\"Claude is ready for input.\", vim.log.levels.INFO, {title = \"Claude [%SESSION_ID%]\"})')"
     }
   },
   "statusline": {

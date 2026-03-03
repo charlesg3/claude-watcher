@@ -53,7 +53,7 @@ log_info "notification-timer started"
 # ---------------------------------------------------------------------------
 declare -a pending=()
 
-for channel in terminal sound os vim; do
+for channel in terminal sound os nvim; do
   local_enabled=$(get_config "notifications.${channel}.enabled" "false")
   local_threshold=$(get_config "notifications.${channel}.notification_threshold" "0")
 
@@ -90,9 +90,21 @@ for entry in "${sorted[@]}"; do
   fi
   elapsed=$threshold
 
-  # Re-check Kitty tab at time of firing — user may have returned
-  if kitty_tab_active; then
-    log_info "notification-timer: tab active at ${elapsed}s — skipping ${channel}"
+  # Re-check focus state at time of firing — user may have switched away
+  local kitty_is_active=false nvim_is_active=false
+  kitty_tab_active && kitty_is_active=true
+  nvim_active "$SESSION_ID" && nvim_is_active=true
+
+  local skip_kitty skip_nvim
+  skip_kitty=$(get_config "notifications.${channel}.skip_kitty_active" "false")
+  skip_nvim=$(get_config "notifications.${channel}.skip_nvim_active" "false")
+
+  if [[ "$skip_kitty" == "true" && "$kitty_is_active" == "true" ]]; then
+    log_info "notification-timer: kitty active at ${elapsed}s — skipping ${channel}"
+    continue
+  fi
+  if [[ "$skip_nvim" == "true" && "$nvim_is_active" == "true" ]]; then
+    log_info "notification-timer: nvim active at ${elapsed}s — skipping ${channel}"
     continue
   fi
 
@@ -101,7 +113,14 @@ for entry in "${sorted[@]}"; do
     terminal) ring_bell ;;
     sound)    play_sound ;;
     os)       notify_os "$TITLE" "$MESSAGE" ;;
-    vim)      ;; # not yet wired
+    nvim)
+      local expr
+      expr=$(get_config "notifications.nvim.notification" "")
+      if [[ -n "$expr" ]]; then
+        expr="${expr//%SESSION_ID%/$SESSION_ID}"
+        notify_vim "$expr"
+      fi
+      ;;
   esac
 done
 

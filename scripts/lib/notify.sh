@@ -12,6 +12,8 @@
 
 _NOTIFY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+source "${_NOTIFY_LIB_DIR}/state.sh"
+
 # ---------------------------------------------------------------------------
 # kitty_tab_active
 # Returns 0 (true) if the current process is running inside Kitty terminal
@@ -31,16 +33,27 @@ kitty_tab_active() {
 }
 
 # ---------------------------------------------------------------------------
+# nvim_active SESSION_ID
+# Returns 0 (true) if the nvim_active field in the session state file is true.
+# Returns 1 if the state file is absent, unreadable, or the field is not true.
+# ---------------------------------------------------------------------------
+nvim_active() {
+  local session_id="$1"
+  local state_file
+  state_file="$(state_file_path "$session_id")"
+  [[ -f "$state_file" ]] || return 1
+  local active
+  active=$(jq -r '.nvim_active // empty' "$state_file" 2>/dev/null)
+  [[ "$active" == "true" ]]
+}
+
+# ---------------------------------------------------------------------------
 # notify_os TITLE MESSAGE
 # Sends a desktop notification using the best available tool.
-# Silently skips if no notification tool is installed, or if the current
-# Kitty tab is active (user is already watching the terminal).
 # ---------------------------------------------------------------------------
 notify_os() {
   local title="$1"
   local message="$2"
-
-  kitty_tab_active && return 0
 
   if [[ "$(uname)" == "Darwin" ]]; then
     if command -v osascript &>/dev/null; then
@@ -76,16 +89,22 @@ cancel_notification_timer() {
 }
 
 # ---------------------------------------------------------------------------
-# _fire_channel CHANNEL TITLE MESSAGE
+# _fire_channel CHANNEL SESSION_ID TITLE MESSAGE
 # Fire a single notification channel immediately.
 # ---------------------------------------------------------------------------
 _fire_channel() {
-  local channel="$1" title="$2" message="$3"
+  local channel="$1" session_id="$2" title="$3" message="$4"
   case "$channel" in
     terminal) ring_bell ;;
     sound)    play_sound ;;
     os)       notify_os "$title" "$message" ;;
-    vim)      ;; # not yet wired
+    nvim)
+      local expr
+      expr=$(get_config "notifications.nvim.notification" "")
+      [[ -n "$expr" ]] || return 0
+      expr="${expr//%SESSION_ID%/$session_id}"
+      notify_vim "$expr"
+      ;;
   esac
 }
 
@@ -99,27 +118,34 @@ _fire_channel() {
 # background notification-timer.sh process (one PID, cancellable via
 # cancel_notification_timer).
 #
-# No-ops entirely if the Kitty tab is currently active.
+# Each channel is skipped independently based on its skip_kitty_active and
+# skip_nvim_active config flags.  Delayed channels are always scheduled so
+# the timer can re-check focus state at fire time.
 # ---------------------------------------------------------------------------
 notify_all() {
   local session_id="$1"
   local title="${2:-Claude}"
   local message="${3:-Claude needs your attention}"
 
-  # If the user is already watching the terminal, skip all notifications
-  kitty_tab_active && return 0
+  local kitty_is_active=false nvim_is_active=false
+  kitty_tab_active && kitty_is_active=true
+  nvim_active "$session_id" && nvim_is_active=true
 
   local has_delayed=false
 
-  for channel in terminal sound os vim; do
-    local enabled threshold
+  for channel in terminal sound os nvim; do
+    local enabled threshold skip_kitty skip_nvim
     enabled=$(get_config "notifications.${channel}.enabled" "false")
     threshold=$(get_config "notifications.${channel}.notification_threshold" "0")
+    skip_kitty=$(get_config "notifications.${channel}.skip_kitty_active" "false")
+    skip_nvim=$(get_config "notifications.${channel}.skip_nvim_active" "false")
 
     [[ "$enabled" == "true" ]] || continue
 
     if [[ "${threshold:-0}" -eq 0 ]]; then
-      _fire_channel "$channel" "$title" "$message"
+      [[ "$skip_kitty" == "true" && "$kitty_is_active" == "true" ]] && continue
+      [[ "$skip_nvim"  == "true" && "$nvim_is_active"  == "true" ]] && continue
+      _fire_channel "$channel" "$session_id" "$title" "$message"
     else
       has_delayed=true
     fi
