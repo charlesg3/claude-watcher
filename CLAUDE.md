@@ -14,11 +14,17 @@ when they've switched away from its window.
 | Path | Purpose |
 |---|---|
 | `hooks/claude-hook.sh` | Single dispatcher for all Claude hook events; chainable |
-| `scripts/statusline.sh` | Reads state file; outputs formatted status string |
+| `scripts/statusline.sh` | Claude `statusLine.command` entry point; resolves STATE_FILE from stdin, patches context_pct/cost_usd, delegates to render-statusline.sh |
+| `scripts/render-statusline.sh` | Full statusline renderer; sources all component scripts in one process |
+| `scripts/components/` | One script per statusline component (`state.sh`, `branch.sh`, `cost.sh`, etc.) |
 | `scripts/lib/config.sh` | Loads and merges global + user config.json |
+| `scripts/lib/notify.sh` | `notify_all`, `kitty_tab_active`, `nvim_active` helpers |
+| `scripts/lib/notification-timer.sh` | Background timer process for deferred notification channels |
+| `scripts/lib/format.sh` | `[[token]]` → ANSI / Vim highlight group converters |
 | `config.json` | Global defaults (version-controlled) |
-| `lua/claude-status/init.lua` | Neovim plugin — session/buffer mapping, claude mode |
-| `plugin/claude-status.vim` | Neovim plugin entry point (autoloads init.lua) |
+| `lua/claude-status/init.lua` | Neovim plugin — session/buffer mapping, statusline, nvim_active tracking |
+| `lua/claude-status/sessions.lua` | Terminal buffer ↔ Claude session PID mapping |
+| `plugin/claude-status.vim` | Neovim plugin entry point; exposes `ClaudeStatusRegister/Unregister` |
 | `install.sh` | OS dependency detection and setup |
 | `tests/test-statusline.sh` | Unit tests for status bar output |
 | `tests/mock-event.sh` | Fire synthetic hook events for manual testing |
@@ -127,18 +133,11 @@ manager. Document optional integrations in the section below.
 
 ## Optional Neovim Integrations
 
-Planned integrations with common Neovim plugins. All are opt-in; the plugin works
-standalone via the built-in `nvim --server` notification bridge.
-
-| Plugin | Integration | Issue |
+| Plugin | Integration | Status |
 |---|---|---|
-| `nvim-notify` / `vim-notify` | Route vim notifications through nvim-notify for styled popups | TBD |
-| `vim-airline` | Expose a status segment function for airline's right section | TBD |
-| `lualine.nvim` | Provide a lualine component for claude state + last-status dot | TBD |
-| `heirline.nvim` | Provide a heirline component table for full customisation | TBD |
-
-When implementing an integration, add it as an optional `require()` in
-`lua/claude-status/init.lua` with a graceful fallback if the plugin is absent.
+| `nvim-notify` | `vim.notify()` calls are routed through nvim-notify automatically if installed | Working |
+| `vim-airline` | Airline is disabled on Claude terminal windows; our statusline replaces it | Working |
+| `lualine.nvim` | Provide a lualine component for claude state + last-status dot | Planned |
 
 ## Architecture
 
@@ -151,13 +150,15 @@ When implementing an integration, add it as an optional `require()` in
 - **Config merge strategy** — `scripts/lib/config.sh` reads `config.json` (repo
   defaults), then deep-merges `~/.config/claude-status/config.json` (user overrides)
   using `jq *`. User values win at every key.
-- **Nvim remote-expr bridge** — the Lua plugin uses `nvim --server $socket --remote-expr`
-  to post notifications to the Neovim instance that owns the session.
-- **Winbar timer** — the Lua plugin uses `vim.loop.new_timer()` to drive the Neovim
-  display refresh loop independently of hook events.
+- **Nvim remote-expr bridge** — hooks call `nvim --server $NVIM --remote-expr` to
+  invoke `ClaudeStatusRegister/Unregister` in the running Neovim instance.
+- **Statusline refresh timer** — the Lua plugin uses `vim.uv.new_timer()` to
+  periodically call `render-statusline.sh vim` and update the cached statusline string.
+- **`nvim_active` tracking** — the Lua plugin writes `nvim_active: true/false` to the
+  session state file whenever window focus changes. The notification timer reads this to
+  skip the nvim channel when the user is already looking at the Claude buffer.
 - **Config precedence** — settings resolution order (highest wins): 1)
-  `vim.g.claude_status_*` variables (Neovim-only); 2)
-  `~/.config/claude-status/config.json` (user overrides); 3) `config.json` in repo
+  `~/.config/claude-status/config.json` (user overrides); 2) `config.json` in repo
   (shipped defaults).
 
 ### Data flow and field sources
@@ -208,7 +209,7 @@ Configure these five hook events to point at `hooks/claude-hook.sh`:
 | `UserPromptSubmit` | patch_state: state=working, prompt_start_epoch, git refresh |
 | `Notification` | fire ready notifications (permission_prompt / idle_prompt); update state to "waiting" |
 | `Stop` | patch_state: state=ready, duration_seconds; fire ready notifications |
-| `SessionEnd` | remove state file |
+| `SessionEnd` | cancel notification timer; remove state file (see #44) |
 
 `PreToolUse`, `PostToolUse`, and `SubagentStop` are not needed — the dispatcher
 ignores them, so wiring them just adds unnecessary overhead.
@@ -245,11 +246,12 @@ Each running Claude session produces `/tmp/claude-status-SESSION_ID.json`:
   "branch": "feat/3-watcher-health",
   "git_staged": 2,
   "git_modified": 1,
-  "context_tokens": 14200,
+  "context_pct": 58,
   "cost_usd": 0.042,
   "prompt_start_epoch": 1700000000,
   "duration_seconds": 12,
-  "claude_pid": 12345
+  "claude_pid": 12345,
+  "nvim_active": true
 }
 ```
 

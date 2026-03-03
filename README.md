@@ -118,14 +118,23 @@ arrays and scalars are replaced wholesale.
 | `log.max_lines` | `500` | Log is trimmed to this many lines on rotation |
 | `notifications.terminal.enabled` | `true` | Enable/disable terminal bell |
 | `notifications.terminal.notification_threshold` | `0` | Seconds to wait before firing; `0` = immediate |
+| `notifications.terminal.skip_kitty_active` | `true` | Skip if the Kitty tab is currently active |
+| `notifications.terminal.skip_nvim_active` | `false` | Skip if the Claude buffer is the focused Neovim window |
 | `notifications.sound.enabled` | `true` | Enable/disable sound |
 | `notifications.sound.volume` | `0.7` | Volume (0.0–1.0) |
 | `notifications.sound.path` | `null` | Sound file or directory to pick a random file from |
-| `notifications.sound.notification_threshold` | `30` | Seconds to wait before firing; `0` = immediate |
-| `notifications.os.enabled` | `true` | Enable/disable OS notifications |
+| `notifications.sound.notification_threshold` | `60` | Seconds to wait before firing; `0` = immediate |
+| `notifications.sound.skip_kitty_active` | `false` | Skip if the Kitty tab is currently active |
+| `notifications.sound.skip_nvim_active` | `false` | Skip if the Claude buffer is the focused Neovim window |
+| `notifications.os.enabled` | `true` | Enable/disable OS desktop notifications |
 | `notifications.os.notification_threshold` | `30` | Seconds to wait before firing; `0` = immediate |
-| `notifications.vim.enabled` | `true` | Enable/disable Vim notifications |
-| `notifications.vim.notification_threshold` | `0` | Seconds to wait before firing; `0` = immediate |
+| `notifications.os.skip_kitty_active` | `true` | Skip if the Kitty tab is currently active |
+| `notifications.os.skip_nvim_active` | `false` | Skip if the Claude buffer is the focused Neovim window |
+| `notifications.nvim.enabled` | `true` | Enable/disable Neovim popup notifications |
+| `notifications.nvim.notification_threshold` | `15` | Seconds to wait before firing; `0` = immediate |
+| `notifications.nvim.skip_kitty_active` | `false` | Skip if the Kitty tab is currently active |
+| `notifications.nvim.skip_nvim_active` | `false` | Skip if the Claude buffer is the focused Neovim window |
+| `notifications.nvim.notification` | (vim.notify call) | Vimscript expression evaluated in Neovim; `%SESSION_ID%` is substituted |
 | `statusline.enabled` | `true` | Master switch for the status bar; disable to use notifications only |
 | `statusline.components.*` | (all enabled) | Toggle individual status bar components |
 | `statusline.icons.*` | (see config.json) | Unicode icons used in the status bar |
@@ -138,7 +147,7 @@ arrays and scalars are replaced wholesale.
   "notifications": {
     "sound": { "enabled": false },
     "os":    { "notification_threshold": 60 },
-    "vim":   { "notification_threshold": 0 }
+    "nvim":  { "notification_threshold": 0 }
   }
 }
 ```
@@ -157,8 +166,10 @@ When either fires, each enabled channel is evaluated in turn. Channels with
 non-zero threshold are handled by a single background timer; they fire after that many
 seconds unless the session receives a new prompt or the Kitty tab becomes active first.
 
-If the Kitty tab is already active when the notification fires, all channels are
-suppressed — you are already watching the terminal.
+Each channel has independent `skip_kitty_active` and `skip_nvim_active` flags that
+suppress it when you are already watching the terminal. For example, the Neovim popup
+channel skips when the Claude buffer is the focused window, but still fires when you
+have switched to editing another file.
 
 ## Configuring Claude Hooks
 
@@ -237,17 +248,20 @@ for any segment you don't want.
 
 ## Neovim Plugin Configuration
 
-Set any of these before `require('claude-status').setup()` (or before the plugin loads
-via pathogen/vim-plug):
+Call `setup()` in your Neovim config to override defaults:
 
-| Variable | Default | Description |
+```lua
+require('claude-status').setup({
+  interval = 1000,  -- statusline refresh interval in ms
+})
+```
+
+| Option | Default | Description |
 |---|---|---|
-| `g:claude_status_enabled` | `1` | Master enable/disable |
-| `g:claude_status_notify_vim` | `1` | Show in-editor notifications |
-| `g:claude_status_notify_level` | `'info'` | Minimum level: `'info'`, `'warn'`, `'error'` |
-| `g:claude_status_claude_mode_hl` | `'StatusLine'` | Highlight group for claude mode indicator |
-| `g:claude_status_server_socket` | `''` | Override nvim server socket path |
-| `g:claude_status_state_dir` | `'/tmp'` | Must match `state_dir` in config.json |
+| `interval` | `1000` | How often (ms) the statusline polls the session state file |
+
+Notification behaviour (channel enabled, thresholds, skip flags) is controlled by
+`config.json` / `~/.config/claude-status/config.json` — not by plugin options.
 
 ## Troubleshooting
 
