@@ -173,8 +173,10 @@ local function _update_win(win)
         if nr > 0 then
           table.insert(range, nr)
           if not proxy then
-            local ok, disabled = pcall(vim.api.nvim_win_get_var, w, "airline_disabled")
-            if not ok or not disabled then proxy = w end
+            -- Use airline's own stl_disabled check so we skip any window
+            -- airline won't render (w:airline_disabled, b:airline_disable_statusline, etc.)
+            local ok, stl_dis = pcall(vim.fn["airline#util#stl_disabled"], nr)
+            if ok and stl_dis == 0 then proxy = w end
           end
         end
       end
