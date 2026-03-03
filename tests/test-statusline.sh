@@ -57,7 +57,7 @@ run_scenario() {
         # Place the state file where statusline.sh will look for it based on session_id.
         local session_id state_dir expected_state
         session_id="$(jq -r '.session_id // "test-session"' "$stdin_file")"
-        state_dir="$(jq -r '.state_dir // "/tmp"' "$REPO_DIR/config.json" 2>/dev/null || echo /tmp)"
+        state_dir="$(jq -r '.state_dir // "/tmp"' "$REPO_DIR/config/config.json" 2>/dev/null || echo /tmp)"
         expected_state="${state_dir}/claude-status-${session_id}.json"
         cp "$state_file" "$expected_state"
 

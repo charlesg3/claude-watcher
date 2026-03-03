@@ -51,7 +51,7 @@ local function _read_json(path)
 end
 
 local function _merged_config()
-  local cfg = _read_json(_plugin_root .. "/config.json") or {}
+  local cfg = _read_json(_plugin_root .. "/config/config.json") or {}
   local user = _read_json(vim.fn.expand("~/.config/claude-status/config.json"))
   if user then cfg = vim.tbl_deep_extend("force", cfg, user) end
   return cfg

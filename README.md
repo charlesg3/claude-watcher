@@ -101,7 +101,7 @@ The `plugin/claude-status.vim` file loads automatically via pathogen.
 
 Configuration is loaded by merging two JSON files:
 
-1. `config.json` in the repo — global defaults, version-controlled
+1. `config/config.json` in the repo — global defaults, version-controlled
 2. `~/.config/claude-status/config.json` — user overrides, never overwritten by updates
 
 Keys present in the user file take precedence. Nested objects are merged one level deep;
@@ -137,8 +137,8 @@ arrays and scalars are replaced wholesale.
 | `notifications.nvim.notification` | (vim.notify call) | Vimscript expression evaluated in Neovim; `%SESSION_ID%` is substituted |
 | `statusline.enabled` | `true` | Master switch for the status bar; disable to use notifications only |
 | `statusline.components.*` | (all enabled) | Toggle individual status bar components |
-| `statusline.icons.*` | (see config.json) | Unicode icons used in the status bar |
-| `statusline.colors.*` | (see config.json) | Hex colors for status bar segments |
+| `statusline.icons.*` | (see config/config.json) | Unicode icons used in the status bar |
+| `statusline.colors.*` | (see config/config.json) | Hex colors for status bar segments |
 
 ### Example user override
 
@@ -243,7 +243,7 @@ Claude session, a global fallback file is supported so the status bar always sho
 most recent session. Multi-session support (showing the state for the session tied to the
 current window) is a known open problem — see the tracking issues for current status.
 
-Toggle components in `config.json` under `statusline.components` — set `"enabled": false`
+Toggle components in `config/config.json` under `statusline.components` — set `"enabled": false`
 for any segment you don't want.
 
 ## Neovim Plugin Configuration
@@ -261,7 +261,7 @@ require('claude-status').setup({
 | `interval` | `1000` | How often (ms) the statusline polls the session state file |
 
 Notification behaviour (channel enabled, thresholds, skip flags) is controlled by
-`config.json` / `~/.config/claude-status/config.json` — not by plugin options.
+`config/config.json` / `~/.config/claude-status/config.json` — not by plugin options.
 
 ## Troubleshooting
 

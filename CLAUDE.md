@@ -21,7 +21,7 @@ when they've switched away from its window.
 | `scripts/lib/notify.sh` | `notify_all`, `kitty_tab_active`, `nvim_active` helpers |
 | `scripts/lib/notification-timer.sh` | Background timer process for deferred notification channels |
 | `scripts/lib/format.sh` | `[[token]]` → ANSI / Vim highlight group converters |
-| `config.json` | Global defaults (version-controlled) |
+| `config/config.json` | Global defaults (version-controlled) |
 | `lua/claude-status/init.lua` | Neovim plugin — session/buffer mapping, statusline, nvim_active tracking |
 | `lua/claude-status/sessions.lua` | Terminal buffer ↔ Claude session PID mapping |
 | `plugin/claude-status.vim` | Neovim plugin entry point; exposes `ClaudeStatusRegister/Unregister` |
@@ -146,7 +146,7 @@ manager. Document optional integrations in the section below.
 - **State files in /tmp** — each Claude session writes a JSON state file at
   `/tmp/claude-status-SESSION_ID.json`. The statusline reads this file.
   Writing is atomic (write to `.tmp`, then `mv`).
-- **Config merge strategy** — `scripts/lib/config.sh` reads `config.json` (repo
+- **Config merge strategy** — `scripts/lib/config.sh` reads `config/config.json` (repo
   defaults), then deep-merges `~/.config/claude-status/config.json` (user overrides)
   using `jq *`. User values win at every key.
 - **Nvim remote-expr bridge** — hooks call `nvim --server $NVIM --remote-expr` to
@@ -157,7 +157,7 @@ manager. Document optional integrations in the section below.
   session state file whenever window focus changes. The notification timer reads this to
   skip the nvim channel when the user is already looking at the Claude buffer.
 - **Config precedence** — settings resolution order (highest wins): 1)
-  `~/.config/claude-status/config.json` (user overrides); 2) `config.json` in repo
+  `~/.config/claude-status/config.json` (user overrides); 2) `config/config.json` in repo
   (shipped defaults).
 
 ### Data flow and field sources
@@ -217,7 +217,7 @@ ignores them, so wiring them just adds unnecessary overhead.
 
 | File | Role |
 |---|---|
-| `config.json` (repo) | Shipped defaults; do not edit for personal preferences |
+| `config/config.json` (repo) | Shipped defaults; do not edit for personal preferences |
 | `~/.config/claude-status/config.json` | User overrides; never overwritten by install/update |
 
 The merge is performed with `jq`. Nested objects are merged one level deep; scalars and

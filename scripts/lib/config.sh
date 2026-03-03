@@ -4,7 +4,7 @@
 # SOURCE this file; do not execute it directly.
 #
 # Merges two JSON files (highest precedence last):
-#   1. <repo>/config.json           — shipped defaults
+#   1. <project>/config/config.json   — shipped defaults
 #   2. ~/.config/claude-status/config.json  — user overrides
 #
 # The merge uses jq's * operator (recursive object merge); user values win at
@@ -21,7 +21,7 @@
 # ---------------------------------------------------------------------------
 _CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CONFIG_PROJECT_DIR="$(cd "$_CONFIG_LIB_DIR/../.." && pwd)"
-_CONFIG_PROJECT_FILE="$_CONFIG_PROJECT_DIR/config.json"
+_CONFIG_PROJECT_FILE="$_CONFIG_PROJECT_DIR/config/config.json"
 
 # ---------------------------------------------------------------------------
 # _build_config — merge repo + user config; print merged JSON to stdout.
